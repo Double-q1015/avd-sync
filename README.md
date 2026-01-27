@@ -200,39 +200,9 @@ SELECT * FROM full_crawl_history ORDER BY crawl_date DESC;
 SELECT * FROM crawl_stats WHERE crawl_mode = 'incremental' ORDER BY crawl_date DESC;
 ```
 
-## 🤖 GitHub Actions 自动化
-
-项目配置了两个GitHub Actions工作流：
-
-### 1. 每日增量爬取（Daily Incremental Crawl）
-
-- **执行时间**: 每天 UTC 00:00（北京时间 08:00）
-- **工作流文件**: `.github/workflows/daily-incremental.yml`
-- **功能**: 
-  - 执行增量爬取，只获取新数据
-  - 优化数据库
-  - 创建增量更新Release（标签格式：`incremental-YYYY.MM.DD`）
-
-### 2. 每月全量爬取（Monthly Full Crawl）
-
-- **执行时间**: 每月1号 UTC 02:00（北京时间 10:00）
-- **工作流文件**: `.github/workflows/monthly-full.yml`
-- **功能**:
-  - 执行全量爬取，更新所有数据
-  - 优化数据库
-  - 创建全量更新Release（标签格式：`full-YYYY.MM.DD`）
-
-### 配置GitHub Actions
-
-1. 确保仓库已启用GitHub Actions
-2. 工作流会自动按计划执行
-3. 也可以手动触发：
-   - Actions → Daily Incremental Crawl → Run workflow（增量）
-   - Actions → Monthly Full Crawl → Run workflow（全量）
-
 ### 使用发布的数据库
 
-1. 访问 [Releases](https://github.com/your-username/avd-sync/releases)
+1. 访问 [Releases](https://github.com/Double-q1015/avd-sync/releases)
 2. 选择需要的版本：
    - **增量更新**: 标签以 `incremental-` 开头，适合日常使用
    - **全量更新**: 标签以 `full-` 开头，数据最完整
@@ -287,8 +257,8 @@ SELECT * FROM crawl_stats WHERE crawl_mode = 'incremental' ORDER BY crawl_date D
 
 ### 贡献方式
 
-- 🐛 [报告 Bug](https://github.com/your-username/avd-sync/issues/new?template=bug_report.md)
-- 💡 [提出功能建议](https://github.com/your-username/avd-sync/issues/new?template=feature_request.md)
+- 🐛 [报告 Bug](https://github.com/Double-q1015/avd-sync/issues/new?template=bug_report.md)
+- 💡 [提出功能建议](https://github.com/Double-q1015/avd-sync/issues/new?template=feature_request.md)
 - 📝 [改进文档](CONTRIBUTING.md#文档改进)
 - 🔧 [提交代码](CONTRIBUTING.md#提交代码)
 
