@@ -1,0 +1,35 @@
+# AVD Sync - Cron 定时任务配置示例
+# 
+# 使用方法：
+# 1. 复制此文件内容
+# 2. 修改路径为你的实际项目路径
+# 3. 执行: crontab -e
+# 4. 粘贴配置并保存
+#
+# 查看当前 Cron 任务: crontab -l
+# 查看 Cron 日志: tail -f /var/log/cron (Linux) 或 grep CRON /var/log/syslog (Ubuntu)
+
+# 设置环境变量（重要！）
+# 确保 GitHub Token 已设置
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+GITHUB_TOKEN=your_github_token_here
+
+# 每日增量爬取和发布
+# 每天 08:00 执行（北京时间）
+# 格式: 分钟 小时 日 月 星期
+0 8 * * * cd /path/to/avd-sync && /usr/bin/python3 scripts/daily_incremental.py >> logs/cron_incremental.log 2>&1
+
+# 每月全量爬取和发布
+# 每月1号 10:00 执行（北京时间）
+0 10 1 * * cd /path/to/avd-sync && /usr/bin/python3 scripts/monthly_full.py >> logs/cron_full.log 2>&1
+
+# 说明：
+# - 修改 /path/to/avd-sync 为你的实际项目路径
+# - 修改 /usr/bin/python3 为你的 Python 解释器路径（使用 which python3 查看）
+# - 确保 GITHUB_TOKEN 环境变量已设置，或在脚本中设置
+# - 日志文件会自动创建在 logs/ 目录下
+
+# 测试 Cron 任务（可选）：
+# 每分钟执行一次测试（测试后记得删除）
+# * * * * * cd /path/to/avd-sync && /usr/bin/python3 scripts/daily_incremental.py >> logs/cron_test.log 2>&1

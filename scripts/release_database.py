@@ -60,20 +60,46 @@ def compress_database(db_path: Path, method: str = 'gzip') -> Optional[Path]:
     Returns:
         压缩后的文件路径，如果失败返回 None
     """
-    logger.info(f"开始压缩数据库文件: {db_path}")
+    file_size_mb = db_path.stat().st_size / (1024 * 1024)
+    logger.info(f"开始压缩数据库文件: {db_path} ({file_size_mb:.1f} MB)")
     
     if method == 'gzip':
         compressed_path = db_path.with_suffix('.db.gz')
+        
+        # 如果压缩文件已存在，先删除（避免使用旧文件）
+        if compressed_path.exists():
+            logger.info(f"删除旧的压缩文件: {compressed_path}")
+            compressed_path.unlink()
+        
         try:
-            subprocess.run(
+            # 显示压缩进度提示
+            logger.info("正在压缩中...（342MB 文件使用 gzip -9 压缩通常需要 1-3 分钟）")
+            logger.info("请耐心等待，压缩完成后会显示结果...")
+            
+            # 使用 gzip 压缩（-k 保留原文件，-9 最高压缩率）
+            result = subprocess.run(
                 ['gzip', '-k', '-9', str(db_path)],
                 check=True,
-                capture_output=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=600  # 10分钟超时
             )
-            logger.info(f"✅ 压缩完成: {compressed_path}")
-            return compressed_path
+            
+            if compressed_path.exists():
+                compressed_size_mb = compressed_path.stat().st_size / (1024 * 1024)
+                compression_ratio = (1 - compressed_size_mb / file_size_mb) * 100
+                logger.info(f"✅ 压缩完成: {compressed_path} ({compressed_size_mb:.1f} MB, 压缩率: {compression_ratio:.1f}%)")
+                return compressed_path
+            else:
+                logger.error("压缩文件未生成")
+                return None
+        except subprocess.TimeoutExpired:
+            logger.error("压缩超时（超过10分钟），请检查文件大小或系统资源")
+            return None
         except subprocess.CalledProcessError as e:
             logger.error(f"gzip 压缩失败: {e}")
+            if e.stderr:
+                logger.error(f"错误信息: {e.stderr.decode()}")
             return None
         except FileNotFoundError:
             logger.error("gzip 未安装，请先安装 gzip")
@@ -82,15 +108,25 @@ def compress_database(db_path: Path, method: str = 'gzip') -> Optional[Path]:
     elif method == '7z':
         compressed_path = db_path.with_suffix('.db.7z')
         try:
-            subprocess.run(
+            logger.info("正在压缩中...（7z 压缩可能需要更长时间）")
+            result = subprocess.run(
                 ['7z', 'a', '-mx=9', '-mmt=4', str(compressed_path), str(db_path)],
                 check=True,
-                capture_output=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
-            logger.info(f"✅ 压缩完成: {compressed_path}")
-            return compressed_path
+            if compressed_path.exists():
+                compressed_size_mb = compressed_path.stat().st_size / (1024 * 1024)
+                compression_ratio = (1 - compressed_size_mb / file_size_mb) * 100
+                logger.info(f"✅ 压缩完成: {compressed_path} ({compressed_size_mb:.1f} MB, 压缩率: {compression_ratio:.1f}%)")
+                return compressed_path
+            else:
+                logger.error("压缩文件未生成")
+                return None
         except subprocess.CalledProcessError as e:
             logger.error(f"7z 压缩失败: {e}")
+            if e.stderr:
+                logger.error(f"错误信息: {e.stderr.decode()}")
             return None
         except FileNotFoundError:
             logger.error("7z 未安装，请先安装 p7zip")
@@ -99,15 +135,25 @@ def compress_database(db_path: Path, method: str = 'gzip') -> Optional[Path]:
     elif method == 'xz':
         compressed_path = db_path.with_suffix('.db.xz')
         try:
-            subprocess.run(
+            logger.info("正在压缩中...（xz 压缩速度较慢但压缩率高）")
+            result = subprocess.run(
                 ['xz', '-k', '-9', str(db_path)],
                 check=True,
-                capture_output=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
-            logger.info(f"✅ 压缩完成: {compressed_path}")
-            return compressed_path
+            if compressed_path.exists():
+                compressed_size_mb = compressed_path.stat().st_size / (1024 * 1024)
+                compression_ratio = (1 - compressed_size_mb / file_size_mb) * 100
+                logger.info(f"✅ 压缩完成: {compressed_path} ({compressed_size_mb:.1f} MB, 压缩率: {compression_ratio:.1f}%)")
+                return compressed_path
+            else:
+                logger.error("压缩文件未生成")
+                return None
         except subprocess.CalledProcessError as e:
             logger.error(f"xz 压缩失败: {e}")
+            if e.stderr:
+                logger.error(f"错误信息: {e.stderr.decode()}")
             return None
         except FileNotFoundError:
             logger.error("xz 未安装，请先安装 xz")
@@ -119,13 +165,35 @@ def compress_database(db_path: Path, method: str = 'gzip') -> Optional[Path]:
 
 
 def optimize_database(db_path: Path) -> bool:
-    """优化数据库（VACUUM）"""
+    """优化数据库（合并 WAL + VACUUM）"""
     logger.info("开始优化数据库...")
     try:
         import sqlite3
         conn = sqlite3.connect(str(db_path))
+        
+        # 先合并 WAL 文件到主数据库
+        logger.info("合并 WAL 文件...")
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
+        
+        # 关闭连接，确保 WAL 文件被清理
+        conn.close()
+        
+        # 清理可能残留的 WAL 和 SHM 文件
+        wal_path = db_path.with_suffix('.db-wal')
+        shm_path = db_path.with_suffix('.db-shm')
+        if wal_path.exists():
+            wal_path.unlink()
+            logger.info("已清理 WAL 文件")
+        if shm_path.exists():
+            shm_path.unlink()
+            logger.info("已清理 SHM 文件")
+        
+        # 重新连接并执行 VACUUM
+        conn = sqlite3.connect(str(db_path))
+        logger.info("执行 VACUUM 优化...")
         conn.execute("VACUUM")
         conn.close()
+        
         logger.info("✅ 数据库优化完成")
         return True
     except Exception as e:
@@ -204,7 +272,7 @@ SHA256 校验和: `{calculate_sha256(db_path)}`
 
 4. **使用 SQLite 工具打开**
    ```bash
-   sqlite3 {db_path.stem}.db
+   sqlite3 {db_path.stem}
    ```
 
 ### 查询示例
@@ -236,14 +304,60 @@ SELECT * FROM crawl_stats ORDER BY date DESC LIMIT 10;
     return body
 
 
+def delete_old_release_by_tag_pattern(
+    repo,
+    tag_pattern: str,
+    exclude_tag: Optional[str] = None
+) -> int:
+    """
+    根据标签模式删除旧的 Release
+    
+    Args:
+        repo: GitHub Repository 对象
+        tag_pattern: 标签模式（如 'latest-incremental', 'latest-full'）
+        exclude_tag: 排除的标签（不删除，通常是当前要创建的标签）
+    
+    Returns:
+        删除的 Release 数量
+    """
+    deleted_count = 0
+    try:
+        releases = repo.get_releases()
+        for release in releases:
+            if release.tag_name == tag_pattern:
+                if exclude_tag and release.tag_name == exclude_tag:
+                    continue
+                try:
+                    logger.info(f"删除旧 Release: {release.tag_name} ({release.title})")
+                    release.delete_release()
+                    deleted_count += 1
+                except Exception as e:
+                    logger.warning(f"删除 Release {release.tag_name} 失败: {e}")
+    except Exception as e:
+        logger.warning(f"获取 Release 列表失败: {e}")
+    
+    return deleted_count
+
+
 def release_to_github(
     db_path: Path,
     tag: str,
     name: str,
     body: str,
-    token: Optional[str] = None
+    token: Optional[str] = None,
+    delete_old: bool = False
 ) -> bool:
-    """发布到 GitHub Release"""
+    """
+    发布到 GitHub Release
+    
+    Args:
+        db_path: 数据库文件路径
+        tag: Release 标签
+        name: Release 名称
+        body: Release 说明
+        token: GitHub Token
+        delete_old: 是否删除同标签的旧 Release
+    """
     if not GITHUB_AVAILABLE:
         logger.error("PyGithub 未安装，请运行: pip install PyGithub")
         return False
@@ -270,15 +384,20 @@ def release_to_github(
         g = Github(token)
         repo = g.get_repo(f"{GITHUB_CONFIG['repo_owner']}/{GITHUB_CONFIG['repo_name']}")
         
-        # 检查 Release 是否已存在
-        try:
-            release = repo.get_release(tag)
-            logger.warning(f"Release {tag} 已存在，将更新...")
-            # GitHub API 不支持更新 Release，需要删除后重新创建
-            logger.info("删除旧 Release...")
-            release.delete_release()
-        except Exception:
-            pass  # Release 不存在，继续创建
+        # 删除旧的同标签 Release（如果启用）
+        if delete_old:
+            deleted_count = delete_old_release_by_tag_pattern(repo, tag, exclude_tag=tag)
+            if deleted_count > 0:
+                logger.info(f"已删除 {deleted_count} 个旧 Release")
+        else:
+            # 检查 Release 是否已存在（兼容旧逻辑）
+            try:
+                release = repo.get_release(tag)
+                logger.warning(f"Release {tag} 已存在，将更新...")
+                logger.info("删除旧 Release...")
+                release.delete_release()
+            except Exception:
+                pass  # Release 不存在，继续创建
         
         # 创建 Release
         logger.info(f"创建 Release: {tag}")
@@ -290,17 +409,22 @@ def release_to_github(
             prerelease=False
         )
         
-        # 上传文件
+        # 上传数据库文件（只上传指定的文件，不包含 WAL/SHM 等临时文件）
         logger.info(f"上传文件: {db_path.name}")
+        if not db_path.exists():
+            logger.error(f"文件不存在: {db_path}")
+            return False
+        
         release.upload_asset(
             path=str(db_path),
             label=db_path.name,
             content_type='application/octet-stream'
         )
         
-        # 上传校验和文件
+        # 计算并上传校验和文件（只上传 SHA256 文件）
         sha256 = calculate_sha256(db_path)
-        checksum_path = db_path.with_suffix('.sha256')
+        # 校验和文件命名：数据库文件名 + .sha256
+        checksum_path = db_path.parent / f"{db_path.name}.sha256"
         checksum_path.write_text(f"{sha256}  {db_path.name}\n")
         
         logger.info(f"上传校验和文件: {checksum_path.name}")
@@ -309,6 +433,9 @@ def release_to_github(
             label=checksum_path.name,
             content_type='text/plain'
         )
+        
+        # 清理临时校验和文件（可选，保留也无妨）
+        # checksum_path.unlink()
         
         logger.info(f"✅ Release 创建成功: {release.html_url}")
         return True
@@ -368,13 +495,28 @@ def release_to_gitee(
         response.raise_for_status()
         release = response.json()
         
-        # 上传文件（Gitee 需要先获取上传 URL）
+        # 上传数据库文件（只上传指定的文件，不包含 WAL/SHM 等临时文件）
         logger.info(f"上传文件: {db_path.name}")
+        if not db_path.exists():
+            logger.error(f"文件不存在: {db_path}")
+            return False
+        
         # Gitee 上传文件需要分两步：先获取上传 URL，再上传文件
         upload_url = f"{base_url}/releases/{release['id']}/attach_files"
         
         with open(db_path, 'rb') as f:
             files = {'file': (db_path.name, f, 'application/octet-stream')}
+            upload_response = requests.post(upload_url, headers={'Authorization': f'token {token}'}, files=files)
+            upload_response.raise_for_status()
+        
+        # 计算并上传校验和文件（只上传 SHA256 文件）
+        sha256 = calculate_sha256(db_path)
+        checksum_path = db_path.parent / f"{db_path.name}.sha256"
+        checksum_path.write_text(f"{sha256}  {db_path.name}\n")
+        
+        logger.info(f"上传校验和文件: {checksum_path.name}")
+        with open(checksum_path, 'rb') as f:
+            files = {'file': (checksum_path.name, f, 'text/plain')}
             upload_response = requests.post(upload_url, headers={'Authorization': f'token {token}'}, files=files)
             upload_response.raise_for_status()
         
@@ -396,6 +538,8 @@ def main():
     parser.add_argument('--compress-method', choices=['gzip', '7z', 'xz'], default='gzip', help='压缩方法')
     parser.add_argument('--optimize', action='store_true', help='优化数据库（VACUUM）')
     parser.add_argument('--token', type=str, help='GitHub/Gitee Token（可选，优先使用环境变量）')
+    parser.add_argument('--delete-old', action='store_true', help='删除同标签的旧 Release（用于固定标签更新）')
+    parser.add_argument('--fixed-filename', type=str, help='使用固定文件名（如 cve_database_incremental.db.gz）')
     
     args = parser.parse_args()
     
@@ -413,9 +557,27 @@ def main():
         logger.error(f"数据库文件不存在: {db_path}")
         return 1
     
-    # 优化数据库（可选）
+    # 优化数据库（可选，但建议在发布前执行以确保数据完整）
     if args.optimize:
         optimize_database(db_path)
+    else:
+        # 即使不优化，也要确保 WAL 文件已合并（避免上传不完整的数据）
+        logger.info("检查并合并 WAL 文件...")
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("PRAGMA wal_checkpoint(FULL)")
+            conn.close()
+            
+            # 清理 WAL 和 SHM 文件
+            wal_path = db_path.with_suffix('.db-wal')
+            shm_path = db_path.with_suffix('.db-shm')
+            if wal_path.exists():
+                wal_path.unlink()
+            if shm_path.exists():
+                shm_path.unlink()
+        except Exception as e:
+            logger.warning(f"合并 WAL 文件失败: {e}")
     
     # 压缩数据库（可选）
     release_file = db_path
@@ -425,6 +587,16 @@ def main():
             release_file = compressed_path
         else:
             logger.warning("压缩失败，使用原始文件")
+    
+    # 如果指定了固定文件名，重命名文件
+    if args.fixed_filename:
+        target_path = db_path.parent / args.fixed_filename
+        if release_file != target_path:
+            logger.info(f"重命名文件: {release_file.name} -> {args.fixed_filename}")
+            if target_path.exists():
+                target_path.unlink()
+            release_file.rename(target_path)
+            release_file = target_path
     
     # 获取数据库统计信息
     stats = get_database_stats(db_path)
@@ -456,7 +628,14 @@ def main():
     
     # 发布
     if args.platform == 'github':
-        success = release_to_github(release_file, args.tag, args.name, body, args.token)
+        success = release_to_github(
+            release_file, 
+            args.tag, 
+            args.name, 
+            body, 
+            args.token,
+            delete_old=args.delete_old
+        )
     else:
         success = release_to_gitee(release_file, args.tag, args.name, body, args.token)
     

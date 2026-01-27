@@ -69,8 +69,8 @@ LOG_CONFIG = {
 
 # GitHub Release 配置
 GITHUB_CONFIG = {
-    'repo_owner': '',  # 需要设置
-    'repo_name': '',  # 需要设置
+    'repo_owner': os.getenv('GITHUB_REPO_OWNER', 'Double-q1015'),  # GitHub 用户名或组织名
+    'repo_name': os.getenv('GITHUB_REPO_NAME', 'avd-sync'),  # 仓库名
     'release_tag_prefix': 'v',  # release标签前缀
     'db_filename': 'cve_database.db',  # 发布的数据库文件名
 }
