@@ -6,6 +6,7 @@
 import argparse
 import logging
 import sys
+import os
 import subprocess
 import hashlib
 from pathlib import Path
@@ -371,7 +372,7 @@ def release_to_github(
         ).stdout.strip()
         
         if not token:
-            token = subprocess.getenv('GITHUB_TOKEN')
+            token = os.getenv('GITHUB_TOKEN')
     
     if not token:
         logger.error("未找到 GitHub token，请设置 GITHUB_TOKEN 环境变量或使用 gh auth login")
@@ -460,7 +461,7 @@ def release_to_gitee(
         return False
     
     if not token:
-        token = subprocess.getenv('GITEE_TOKEN')
+        token = os.getenv('GITEE_TOKEN')
     
     if not token:
         logger.error("未找到 Gitee token，请设置 GITEE_TOKEN 环境变量")

@@ -9,11 +9,22 @@
 # 查看当前 Cron 任务: crontab -l
 # 查看 Cron 日志: tail -f /var/log/cron (Linux) 或 grep CRON /var/log/syslog (Ubuntu)
 
-# 设置环境变量（重要！）
-# 确保 GitHub Token 已设置
+# ============================================
+# 环境变量配置（必须在所有任务之前）
+# ============================================
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
+
+# 方法一：直接在 crontab 中设置（简单但不安全）
 GITHUB_TOKEN=your_github_token_here
+
+# 方法二：从文件读取（更安全，推荐生产环境）
+# 取消下面的注释，并创建 /etc/avd-sync/env 文件
+# 0 8 * * * cd /path/to/avd-sync && source /etc/avd-sync/env && /usr/bin/python3 scripts/daily_incremental.py >> logs/cron_incremental.log 2>&1
+
+# ============================================
+# 定时任务配置
+# ============================================
 
 # 每日增量爬取和发布
 # 每天 08:00 执行（北京时间）
