@@ -305,7 +305,7 @@ SELECT * FROM crawl_stats WHERE crawl_mode = 'incremental' ORDER BY crawl_date D
 
 ## 📧 联系方式
 
-- 📮 提交 [Issue](https://github.com/your-username/avd-sync/issues)
+- 📮 提交 [Issue](https://github.com/Double-q1015/avd-sync/issues)
 - 📖 查看 [文档](docs/)
 - 🤝 查看 [贡献指南](CONTRIBUTING.md)
 
