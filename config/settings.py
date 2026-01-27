@@ -29,7 +29,7 @@ CRAWLER_CONFIG = {
 
 # 浏览器配置
 BROWSER_CONFIG = {
-    'headless': os.getenv('HEADLESS', 'False').lower() == 'true',  # 是否无头模式（Docker中建议True）
+    'headless': os.getenv('HEADLESS', 'True').lower() == 'true',  # 是否无头模式（默认True，Docker中建议True）
     'no_sandbox': True,  # 关闭沙箱模式（Docker中必须）
     'user_agent': None,  # 自定义User-Agent
     'timeout': int(os.getenv('BROWSER_TIMEOUT', '30')),  # 页面加载超时（秒）
