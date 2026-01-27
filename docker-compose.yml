@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  avd-sync:
+    build: .
+    container_name: avd-sync
+    # 资源限制（根据实际需求调整）
+    deploy:
+      resources:
+        limits:
+          cpus: '2'      # 最多使用2核CPU
+          memory: 2G     # 最多使用2GB内存
+        reservations:
+          cpus: '1'      # 保证至少1核CPU
+          memory: 1G     # 保证至少1GB内存
+    # 共享内存大小（Chromium需要）
+    shm_size: 2gb
+    # 环境变量
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    # 用户配置（使用非 root 用户，UID 1000）
+    user: "1000:1000"
+    # 数据卷（持久化数据库和日志）
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    # 重启策略
+    restart: unless-stopped
+    # 网络模式（如果需要）
+    # network_mode: bridge
+

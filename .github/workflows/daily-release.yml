@@ -1,0 +1,92 @@
+name: Daily Database Release
+
+on:
+  schedule:
+    # 每天 UTC 时间 00:00 执行（北京时间 08:00）
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run crawler
+      run: |
+        python main.py --optimize
+      env:
+        # 如果需要设置环境变量，在这里添加
+        TZ: Asia/Shanghai
+    
+    - name: Check database file
+      id: check_db
+      run: |
+        if [ -f "data/cve_database.db" ]; then
+          DB_SIZE=$(du -h data/cve_database.db | cut -f1)
+          echo "数据库文件大小: $DB_SIZE"
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "数据库文件不存在！"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+    
+    - name: Get current date
+      id: date
+      run: |
+        echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        echo "tag=v$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+    
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.date.outputs.tag }}
+        name: CVE Database Release - ${{ steps.date.outputs.date }}
+        body: |
+          ## CVE数据库每日更新
+          
+          **发布日期**: ${{ steps.date.outputs.date }}
+          
+          ### 数据库信息
+          - 文件: `cve_database.db`
+          - 大小: 请查看文件详情
+          
+          ### 使用方法
+          1. 下载 `cve_database.db` 文件
+          2. 使用SQLite工具打开数据库
+          3. 查询CVE信息
+          
+          ### 数据库结构
+          - 主表: `cve_records` - 存储CVE详细信息
+          - 统计表: `crawl_stats` - 存储爬取统计信息
+          
+          ### 查询示例
+          ```sql
+          -- 查询所有CVE
+          SELECT * FROM cve_records ORDER BY publish_date DESC LIMIT 10;
+          
+          -- 查询高危漏洞
+          SELECT * FROM cve_records WHERE danger_level LIKE '%高%' ORDER BY publish_date DESC;
+          
+          -- 查询特定CVE
+          SELECT * FROM cve_records WHERE cve = 'CVE-2024-XXXX';
+          ```
+        files: data/cve_database.db
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

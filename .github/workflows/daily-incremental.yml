@@ -1,0 +1,85 @@
+name: Daily Incremental Crawl
+
+on:
+  schedule:
+    # 每天 UTC 时间 00:00 执行（北京时间 08:00）
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  incremental-crawl:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run incremental crawler
+      run: |
+        python main.py --mode incremental --optimize
+      env:
+        TZ: Asia/Shanghai
+    
+    - name: Check database file
+      id: check_db
+      run: |
+        if [ -f "data/cve_database.db" ]; then
+          DB_SIZE=$(du -h data/cve_database.db | cut -f1)
+          echo "数据库文件大小: $DB_SIZE"
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "数据库文件不存在！"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+    
+    - name: Get current date
+      id: date
+      run: |
+        echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        echo "tag=incremental-$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+    
+    - name: Create incremental release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.date.outputs.tag }}
+        name: CVE Database Incremental Update - ${{ steps.date.outputs.date }}
+        body: |
+          ## CVE数据库增量更新
+          
+          **发布日期**: ${{ steps.date.outputs.date }}
+          **更新类型**: 增量更新
+          
+          ### 数据库信息
+          - 文件: `cve_database.db`
+          - 大小: 请查看文件详情
+          
+          ### 使用方法
+          1. 下载 `cve_database.db` 文件
+          2. 使用SQLite工具打开数据库
+          3. 查询CVE信息
+          
+          ### 查询示例
+          ```sql
+          -- 查询最新的CVE
+          SELECT * FROM cve_records ORDER BY publish_date DESC LIMIT 10;
+          
+          -- 查询高危漏洞
+          SELECT * FROM cve_records WHERE danger_level LIKE '%高%' ORDER BY publish_date DESC;
+          ```
+        files: data/cve_database.db
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

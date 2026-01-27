@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 项目特定
+data/
+logs/
+*.db
+*.db-journal
+*.log
+backups/
+
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 配置文件（如果包含敏感信息）
+# config/local_settings.py
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.crt
+*.cert
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*~

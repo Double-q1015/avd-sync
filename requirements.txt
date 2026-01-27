@@ -1,0 +1,22 @@
+# 核心依赖
+DrissionPage>=4.0.0
+beautifulsoup4>=4.12.0
+tqdm>=4.66.0
+lxml>=4.9.0
+
+# 数据库依赖
+# SQLite: Python内置，无需安装
+# SQLAlchemy: 核心ORM框架（推荐）
+sqlalchemy>=2.0.0
+
+# MySQL驱动（可选，二选一）
+# pymysql>=1.0.0  # MySQL数据库支持（推荐，纯Python实现）
+# mysql-connector-python>=8.0.0  # MySQL官方连接器
+
+# 可选依赖（用于数据处理）
+# pandas>=2.0.0  # 如果需要数据分析功能
+
+# Release发布依赖（可选）
+PyGithub>=2.0.0  # GitHub API客户端（用于发布脚本）
+requests>=2.31.0  # HTTP库（用于Gitee发布）
+
