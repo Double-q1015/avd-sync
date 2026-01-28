@@ -16,10 +16,18 @@ from typing import Optional, Tuple
 # 类型检查忽略（PyGithub 可能未安装）
 try:
     from github import Github  # type: ignore
+    try:
+        from github import Auth  # type: ignore
+        GITHUB_AUTH_AVAILABLE = True
+    except ImportError:
+        # 旧版本 PyGithub 可能没有 Auth
+        GITHUB_AUTH_AVAILABLE = False
     GITHUB_AVAILABLE = True
 except ImportError:
     GITHUB_AVAILABLE = False
+    GITHUB_AUTH_AVAILABLE = False
     Github = None  # type: ignore
+    Auth = None  # type: ignore
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -316,26 +324,42 @@ def delete_old_release_by_tag_pattern(
     Args:
         repo: GitHub Repository 对象
         tag_pattern: 标签模式（如 'latest-incremental', 'latest-full'）
-        exclude_tag: 排除的标签（不删除，通常是当前要创建的标签）
+        exclude_tag: 排除的标签（不删除，通常用于排除其他标签）
     
     Returns:
         删除的 Release 数量
     """
     deleted_count = 0
     try:
-        releases = repo.get_releases()
+        logger.info(f"开始查找标签为 '{tag_pattern}' 的 Release...")
+        # get_releases() 返回的是一个 PaginatedList，需要转换为列表
+        releases = list(repo.get_releases())
+        logger.info(f"找到 {len(releases)} 个 Release")
+        total_releases = 0
         for release in releases:
+            total_releases += 1
+            logger.debug(f"检查 Release: {release.tag_name} (匹配: {release.tag_name == tag_pattern})")
+            # 如果标签匹配，则删除（用于固定标签更新场景）
             if release.tag_name == tag_pattern:
-                if exclude_tag and release.tag_name == exclude_tag:
+                # exclude_tag 用于排除其他不同的标签，如果相同则仍然删除（因为要用相同标签创建新的）
+                if exclude_tag and exclude_tag != tag_pattern and release.tag_name == exclude_tag:
+                    # 只有当 exclude_tag 与 tag_pattern 不同时才跳过
+                    logger.debug(f"跳过 Release {release.tag_name}（在排除列表中）")
                     continue
                 try:
                     logger.info(f"删除旧 Release: {release.tag_name} ({release.title})")
                     release.delete_release()
                     deleted_count += 1
+                    logger.info(f"✅ 成功删除 Release: {release.tag_name}")
                 except Exception as e:
-                    logger.warning(f"删除 Release {release.tag_name} 失败: {e}")
+                    logger.error(f"删除 Release {release.tag_name} 失败: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+        logger.debug(f"共检查了 {total_releases} 个 Release，删除了 {deleted_count} 个")
     except Exception as e:
-        logger.warning(f"获取 Release 列表失败: {e}")
+        logger.error(f"获取 Release 列表失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     
     return deleted_count
 
@@ -382,15 +406,27 @@ def release_to_github(
         if Github is None:
             logger.error("PyGithub 未正确导入")
             return False
-        g = Github(token)
+        
+        # 使用新的 PyGithub API（如果可用）
+        if GITHUB_AUTH_AVAILABLE and Auth is not None:
+            g = Github(auth=Auth.Token(token))
+        else:
+            # 兼容旧版本 PyGithub
+            g = Github(token)
+        
         repo = g.get_repo(f"{GITHUB_CONFIG['repo_owner']}/{GITHUB_CONFIG['repo_name']}")
         
         # 删除旧的同标签 Release（如果启用）
         if delete_old:
-            deleted_count = delete_old_release_by_tag_pattern(repo, tag, exclude_tag=tag)
+            logger.info(f"🔍 查找并删除标签为 '{tag}' 的旧 Release...")
+            # 不传递 exclude_tag，删除所有匹配的 Release
+            deleted_count = delete_old_release_by_tag_pattern(repo, tag)
             if deleted_count > 0:
-                logger.info(f"已删除 {deleted_count} 个旧 Release")
+                logger.info(f"✅ 已删除 {deleted_count} 个旧 Release")
+            else:
+                logger.warning(f"⚠️ 未找到标签为 '{tag}' 的旧 Release（可能不存在或已被删除）")
         else:
+            logger.info("跳过删除旧 Release（未启用 --delete-old）")
             # 检查 Release 是否已存在（兼容旧逻辑）
             try:
                 release = repo.get_release(tag)
@@ -621,6 +657,7 @@ def main():
     logger.info(f"  文件: {release_file.name}")
     logger.info(f"  大小: {size_str}")
     logger.info(f"  CVE 数量: {stats.get('cve_count', 'N/A'):,}")
+    logger.info(f"  删除旧 Release: {args.delete_old}")
     
     # 检查文件大小限制
     if file_size > 2 * 1024 * 1024 * 1024:  # 2GB
