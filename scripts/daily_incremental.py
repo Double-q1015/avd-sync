@@ -4,6 +4,7 @@
 用于服务器 Cron 定时任务
 """
 import sys
+import os
 import subprocess
 from pathlib import Path
 
@@ -25,15 +26,24 @@ def main():
     # 1. 执行增量爬取
     logger.info("开始增量爬取...")
     try:
+        # 确保环境变量传递给子进程
+        env = os.environ.copy()
+        project_root = Path(__file__).parent.parent
+        main_script = project_root / 'main.py'
+        
         result = subprocess.run(
-            ['python', 'main.py', '--mode', 'incremental', '--optimize'],
-            cwd=Path(__file__).parent.parent,
+            [sys.executable, '-u', str(main_script), '--mode', 'incremental', '--optimize'],
+            cwd=project_root,
             capture_output=True,
-            text=True
+            text=True,
+            env=env
         )
         
         if result.returncode != 0:
-            logger.error(f"增量爬取失败: {result.stderr}")
+            error_msg = result.stderr if result.stderr else result.stdout
+            logger.error(f"增量爬取失败 (返回码: {result.returncode})")
+            if error_msg:
+                logger.error(f"错误信息: {error_msg}")
             return 1
         
         logger.info("✅ 增量爬取完成")
@@ -50,9 +60,21 @@ def main():
     # 3. 发布到 GitHub Release
     logger.info("开始发布到 GitHub Release...")
     try:
+        # 确保环境变量传递给子进程
+        env = os.environ.copy()
+        
+        # 使用当前 Python 解释器和绝对路径
+        project_root = Path(__file__).parent.parent
+        release_script = project_root / 'scripts' / 'release_database.py'
+        
+        logger.info(f"执行发布脚本: {release_script}")
+        logger.info("注意：上传大文件（64MB）可能需要 2-3 分钟，请耐心等待...")
+        
+        # 使用 sys.executable 确保使用相同的 Python 解释器
+        # 添加 -u 参数（unbuffered）确保输出实时显示
         result = subprocess.run(
             [
-                'python', 'scripts/release_database.py',
+                sys.executable, '-u', str(release_script),
                 '--tag', 'latest-incremental',
                 '--name', 'CVE Database - Latest Incremental Update',
                 '--compress',
@@ -60,17 +82,18 @@ def main():
                 '--delete-old',
                 '--fixed-filename', 'cve_database_incremental.db.gz'
             ],
-            cwd=Path(__file__).parent.parent,
-            capture_output=True,
-            text=True
+            cwd=project_root,
+            capture_output=False,  # 不捕获输出，实时显示
+            text=True,
+            env=env,
+            bufsize=0  # 无缓冲，实时输出
         )
         
         if result.returncode != 0:
-            logger.error(f"发布失败: {result.stderr}")
+            logger.error(f"发布失败 (返回码: {result.returncode})")
             return 1
         
         logger.info("✅ 发布成功")
-        logger.info(result.stdout)
         return 0
         
     except Exception as e:
