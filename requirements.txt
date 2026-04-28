@@ -7,7 +7,7 @@ lxml>=4.9.0
 # 数据库依赖
 # SQLite: Python内置，无需安装
 # SQLAlchemy: 核心ORM框架（推荐）
-sqlalchemy>=2.0.0
+sqlalchemy>=2.0.49
 
 # MySQL驱动（可选，二选一）
 # pymysql>=1.0.0  # MySQL数据库支持（推荐，纯Python实现）
