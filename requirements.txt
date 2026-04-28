@@ -18,5 +18,5 @@ sqlalchemy>=2.0.0
 
 # Release发布依赖（可选）
 PyGithub>=2.0.0  # GitHub API客户端（用于发布脚本）
-requests>=2.31.0  # HTTP库（用于Gitee发布）
+requests>=2.33.1  # HTTP库（用于Gitee发布）
 
